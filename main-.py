@@ -91,9 +91,41 @@ print(meta)
 market = "1.170226122"
 
 selection_ids = meta[meta["app_data.marketId"] =="1.170226122"]["selectionId"].tolist() #根据market ID 提取 selection ID
-for selection_id in selection_ids:
+for selection_id in selection_ids[0:1]:#
+    
     print(f"extracting data for selection id {selection_id}")
     order_book = extract_order_book(exchange_df, market, selection_id) # 根据market ID和selection ID提取order book
     trades = trades_json_to_df(data, selection_id) # 根据selection ID提取trades信息
+    
+    
+    order_book_new = order_book.copy()
+    order_book_new=order_book_new.reset_index()
+    time_1 = order_book_new['time']
+    time_1 = time_1.dt.floor('S')
+    row_num, column_num = order_book_new.shape
+    trade_data = np.zeros(row_num)
+    
+    row_num, column_num = trades.shape
+    trades_new = trades.copy()
+    trades_new=trades_new.reset_index()
+    time_2 = trades_new['placedDate'].dt.tz_localize(None)
+    order_size = trades_new['instruction.limitOrder.size']
+    for n in range(row_num):
+        time_point = time_2[n]
+        order_size_once = order_size[n]
+        idx=time_1[time_1==time_point].index[0]
+        while trade_data[idx] != 0:
+            idx = idx+1
+        trade_data[idx] = order_size_once
+    order_book_new['trade'] = trade_data
     order_book.to_csv(f"order_book_{selection_id}.csv")
     trades.to_csv(f"trades_{selection_id}.csv")
+    order_book_new.to_csv(f"order_book_new_{selection_id}.csv")
+
+plt.subplot(2,1,1)
+plt.plot(order_book_new['time'],order_book_new['size_back'])
+plt.subplot(2,1,2)
+plt.plot(order_book_new['time'],order_book_new['trade'])
+plt.show()
+
+
