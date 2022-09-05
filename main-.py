@@ -91,12 +91,17 @@ print(meta)
 market = "1.170226122"
 
 selection_ids = meta[meta["app_data.marketId"] =="1.170226122"]["selectionId"].tolist() #根据market ID 提取 selection ID
-for selection_id in selection_ids[0:1]:#
+for selection_id in selection_ids[0:18]:#
     
     print(f"extracting data for selection id {selection_id}")
     order_book = extract_order_book(exchange_df, market, selection_id) # 根据market ID和selection ID提取order book
     trades = trades_json_to_df(data, selection_id) # 根据selection ID提取trades信息
-    
+    total_back = order_book['price_back'] * order_book['size_back']
+    total_lay = - order_book['price_lay'] * order_book['size_lay']
+    order_book['total_back'] = total_back
+    order_book['total_lay'] = total_lay
+    trade_all = trades['instruction.limitOrder.price'] * trades['instruction.limitOrder.size']
+    trades['trade_all'] = trade_all
     
     order_book_new = order_book.copy()
     order_book_new=order_book_new.reset_index()
@@ -109,23 +114,39 @@ for selection_id in selection_ids[0:1]:#
     trades_new = trades.copy()
     trades_new=trades_new.reset_index()
     time_2 = trades_new['placedDate'].dt.tz_localize(None)
-    order_size = trades_new['instruction.limitOrder.size']
+    trade_side = trades['instruction.side']
+    idx_all = np.zeros(row_num)
     for n in range(row_num):
         time_point = time_2[n]
-        order_size_once = order_size[n]
+        if trade_side[n] == 'LAY':
+            trade_all_once = -trade_all[n]
+            trade_all[n] = -trade_all[n]
+        else:
+            trade_all_once = trade_all[n]
         idx=time_1[time_1==time_point].index[0]
         while trade_data[idx] != 0:
             idx = idx+1
-        trade_data[idx] = order_size_once
+        trade_data[idx] = trade_all_once
+        idx_all[n]=idx
     order_book_new['trade'] = trade_data
     order_book.to_csv(f"order_book_{selection_id}.csv")
     trades.to_csv(f"trades_{selection_id}.csv")
     order_book_new.to_csv(f"order_book_new_{selection_id}.csv")
-
-plt.subplot(2,1,1)
-plt.plot(order_book_new['time'],order_book_new['size_back'])
-plt.subplot(2,1,2)
-plt.plot(order_book_new['time'],order_book_new['trade'])
-plt.show()
+    
+    plt.figure()
+    (markers, stemlines, baseline) = plt.stem(order_book_new['time'],order_book_new['total_back'])
+    plt.setp(stemlines, linestyle="-", color="blue" )
+    plt.setp(markers, visible=False)
+    plt.setp(baseline, color="grey")
+    (markers, stemlines, baseline) = plt.stem(order_book_new['time'],order_book_new['total_lay'])
+    plt.setp(stemlines, linestyle="-", color="red" )
+    plt.setp(markers, visible=False)
+    plt.setp(baseline, visible=False)
+    (markers, stemlines, baseline) = plt.stem(order_book_new['time'][idx_all],trade_all)
+    plt.setp(stemlines, linestyle="-", color="green" )
+    plt.setp(markers, color="green")
+    plt.setp(baseline, visible=False)
+    # plt.plot(order_book_new['time'],order_book_new['trade'])
+    plt.show()
 
 
